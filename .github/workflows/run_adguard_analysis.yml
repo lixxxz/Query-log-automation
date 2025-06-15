@@ -2,6 +2,10 @@ name: AdGuard Log Processor
 
 on:
   workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'Specific IP to analyze (leave empty for all IPs)'
+        required: false
 
 jobs:
   process-logs:
@@ -35,4 +39,5 @@ jobs:
           REMOTE_LOG_PATH: ${{ secrets.REMOTE_LOG_PATH }}
           GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          TARGET_IP: ${{ secrets.TARGET.IP }}
         run: python main.py
