@@ -7,8 +7,9 @@ import os
 import paramiko
 import json
 import pickle
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 def get_ssh_details_from_env():
     return (
@@ -92,7 +93,7 @@ def analyze_and_export(logs):
     ).reset_index()
     interval_summary['Time_Block'] = interval_summary['time_block'].apply(lambda b: f"{b*3:02}:00 - {b*3+2:02}:59")
     df_time_blocks = interval_summary[['Time_Block', 'Query_Count', 'Avg_Response_ms', 'Most_Accessed_Domain']]
-    df_time_blocks['Avg_Response_ms'] = df_time_blocks['Avg_Response_ms'].round(2)
+    df_time_blocks.loc[:, 'Avg_Response_ms'] = df_time_blocks['Avg_Response_ms'].round(2)
 
     domain_counter = Counter(df['domain'])
     df_top_domains = pd.DataFrame(domain_counter.most_common(10), columns=['Domain', 'Access_Count'])
@@ -111,26 +112,23 @@ def analyze_and_export(logs):
     return output_filename
 
 def upload_to_gdrive(filepath):
-    print(f"🚀 Uploading {filepath} to Google Drive...")
+    print(f"🚀 Uploading {filepath} to Google Drive using service account...")
     creds_json = os.environ['GDRIVE_CREDENTIALS_JSON']
     folder_id = os.environ['GDRIVE_FOLDER_ID']
 
-    with open("creds.json", "w") as f:
+    with open("sa_creds.json", "w") as f:
         f.write(creds_json)
 
-    gauth = GoogleAuth()
-    gauth.LoadClientConfigFile("creds.json")
-    gauth.LocalWebserverAuth()
-    drive = GoogleDrive(gauth)
+    creds = service_account.Credentials.from_service_account_file("sa_creds.json", scopes=["https://www.googleapis.com/auth/drive"])
+    service = build('drive', 'v3', credentials=creds)
 
     file_metadata = {
-        'title': os.path.basename(filepath),
-        'parents': [{'id': folder_id}]
+        'name': os.path.basename(filepath),
+        'parents': [folder_id]
     }
-    gfile = drive.CreateFile(file_metadata)
-    gfile.SetContentFile(filepath)
-    gfile.Upload()
-    print("✅ Upload complete!")
+    media = MediaFileUpload(filepath, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    uploaded_file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    print(f"✅ Upload complete! File ID: {uploaded_file['id']}")
 
 def main():
     host, port, user, password, key_filepath, remote_path = get_ssh_details_from_env()
