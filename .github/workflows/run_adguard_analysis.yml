@@ -31,6 +31,6 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_KEY_PATH: ~/.ssh/id_rsa
-          SSH_REMOTE_LOG: ${{ secrets.SSH_REMOTE_LOG }}
+          SSH_REMOTE_LOG: ${{ secrets.REMOTE_LOG_PATH }}
         run: |
           python main.py
