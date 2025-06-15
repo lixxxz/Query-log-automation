@@ -4,9 +4,9 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-  # Runs the workflow automatically every day at 01:00 UTC (8:00 AM WITA)
+  # Runs the workflow automatically every day at 08:00 UTC (13:00 WITA)
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 8 * * *'
 
 jobs:
   build-and-upload-report:
@@ -38,8 +38,8 @@ jobs:
         REMOTE_LOG_PATH: ${{ secrets.REMOTE_LOG_PATH }}
         GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
         GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
-        # You can set the analysis options here if you want
-        ANALYSIS_IP_CHOICE: '2' # 1 for specific, 2 for all
-        ANALYSIS_TIME_CHOICE: '2' # 1 for peak, 2 for 24h
-        # ANALYSIS_TARGET_IP: '192.168.1.100' # Only needed if IP_CHOICE is '1'
-      run: .github/workflows/main3.py # Make sure to use the correct filename
+        ANALYSIS_IP_CHOICE: '1' # 1 for specific, 2 for all
+        ANALYSIS_TARGET_IP: ${{ secrets.ANALYSIS_TARGET_IP }}
+        ANALYSIS_TIME_CHOICE: '1' # 1 for peak, 2 for 24h
+        
+      run: .github/workflows/main.py # Make sure to use the correct filename
