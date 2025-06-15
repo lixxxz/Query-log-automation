@@ -24,7 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r .github/workflows/requirements.txt
+        pip install -r requirements.txt
 
     - name: Run Analysis Script
       env:
@@ -42,4 +42,4 @@ jobs:
         ANALYSIS_TARGET_IP: ${{ secrets.ANALYSIS_TARGET_IP }}
         ANALYSIS_TIME_CHOICE: '1' # 1 for peak, 2 for 24h
         
-      run: .github/workflows/main.py # Make sure to use the correct filename
+      run: main.py # Make sure to use the correct filename
