@@ -31,7 +31,7 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_KEY_PATH: ~/.ssh/id_rsa
+          SSH_KEY: ~/.ssh/id_rsa
           SSH_REMOTE_LOG: ${{ secrets.REMOTE_LOG_PATH }}
           GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
