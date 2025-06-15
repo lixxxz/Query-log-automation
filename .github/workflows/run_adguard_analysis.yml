@@ -6,6 +6,7 @@ on:
 jobs:
   process-logs:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -19,18 +20,19 @@ jobs:
         run: |
           pip install pandas paramiko pydrive2 openpyxl
 
-      - name: Set up SSH Key
+      - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: Run Log Processor
+      - name: Run AdGuard Script
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_KEY_PATH: ~/.ssh/id_rsa
           SSH_REMOTE_LOG: ${{ secrets.REMOTE_LOG_PATH }}
-        run: |
-          python main.py
+          GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: python main.py
