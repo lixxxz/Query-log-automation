@@ -1,0 +1,45 @@
+name: AdGuard Daily Report
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+  # Runs the workflow automatically every day at 01:00 UTC (8:00 AM WITA)
+  schedule:
+    - cron: '0 1 * * *'
+
+jobs:
+  build-and-upload-report:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' # Or your preferred python version
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Analysis Script
+      env:
+        # Pass GitHub Secrets to the Python script as environment variables
+        CI: true # Lets the script know it's in an automated environment
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_PORT: ${{ secrets.SSH_PORT }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+        SSH_KEY: ${{ secrets.SSH_KEY }}
+        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        REMOTE_LOG_PATH: ${{ secrets.REMOTE_LOG_PATH }}
+        GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
+        # You can set the analysis options here if you want
+        ANALYSIS_IP_CHOICE: '2' # 1 for specific, 2 for all
+        ANALYSIS_TIME_CHOICE: '2' # 1 for peak, 2 for 24h
+        # ANALYSIS_TARGET_IP: '192.168.1.100' # Only needed if IP_CHOICE is '1'
+      run: python your_script_name.py # Make sure to use the correct filename
