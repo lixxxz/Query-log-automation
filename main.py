@@ -16,8 +16,8 @@ def get_ssh_details_from_env():
         int(os.environ.get('SSH_PORT', 22)),
         os.environ['SSH_USER'],
         os.environ.get('SSH_PASSWORD', None),
-        os.environ['SSH_KEY_PATH'],
-        os.environ['SSH_REMOTE_LOG']
+        os.environ['SSH_KEY'],
+        os.environ['REMOTE_LOG_PATH']
     )
 
 def download_log_file_sftp(host, port, user, password, key_filepath, remote_path):
@@ -112,18 +112,22 @@ def analyze_and_export(logs):
 
 def upload_to_gdrive(filepath):
     print(f"🚀 Uploading {filepath} to Google Drive...")
-    gauth = GoogleAuth()
-    gauth.LoadCredentialsFile("token.json")
-    if gauth.credentials is None:
-        gauth.LocalWebserverAuth()
-    elif gauth.access_token_expired:
-        gauth.Refresh()
-    else:
-        gauth.Authorize()
-    gauth.SaveCredentialsFile("token.json")
+    creds_json = os.environ['GDRIVE_CREDENTIALS_JSON']
+    folder_id = os.environ['GDRIVE_FOLDER_ID']
 
+    with open("creds.json", "w") as f:
+        f.write(creds_json)
+
+    gauth = GoogleAuth()
+    gauth.LoadClientConfigFile("creds.json")
+    gauth.LocalWebserverAuth()
     drive = GoogleDrive(gauth)
-    gfile = drive.CreateFile({'title': os.path.basename(filepath)})
+
+    file_metadata = {
+        'title': os.path.basename(filepath),
+        'parents': [{'id': folder_id}]
+    }
+    gfile = drive.CreateFile(file_metadata)
     gfile.SetContentFile(filepath)
     gfile.Upload()
     print("✅ Upload complete!")
