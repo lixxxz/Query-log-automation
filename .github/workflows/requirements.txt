@@ -1,0 +1,13 @@
+# For data analysis and writing to Excel files
+pandas==2.2.2
+
+# For connecting to your server via SSH/SFTP
+paramiko==3.4.0
+
+# Required by pandas to create and write .xlsx Excel files
+openpyxl==3.1.2
+
+# Google API libraries for uploading to Google Drive
+google-api-python-client==2.134.0
+google-auth-httplib2>=0.1.0,<0.3.0
+google-auth-oauthlib==1.2.0
