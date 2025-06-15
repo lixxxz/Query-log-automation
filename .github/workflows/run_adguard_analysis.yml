@@ -18,7 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas paramiko pydrive2 openpyxl
+          pip install pandas paramiko openpyxl google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
 
       - name: Set up SSH key
         run: |
