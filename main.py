@@ -16,7 +16,7 @@ def get_ssh_details_from_env():
         int(os.environ.get('SSH_PORT', 22)),
         os.environ['SSH_USER'],
         os.environ.get('SSH_PASSWORD', None),
-        os.environ['SSH_KEY'],
+        os.path.expanduser(os.environ['SSH_KEY']),
         os.environ['REMOTE_LOG_PATH']
     )
 
