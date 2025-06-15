@@ -1,12 +1,10 @@
-import requests
+import os
 import pandas as pd
 from datetime import datetime, time
 from collections import Counter
 from statistics import mean
-import os
 import paramiko
 import json
-import pickle
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -44,82 +42,162 @@ def download_log_file_sftp(host, port, user, password, key_filepath, remote_path
     finally:
         ssh_client.close()
 
-def save_cache(data, cache_path):
-    with open(cache_path, 'wb') as f:
-        pickle.dump(data, f)
-
-def load_cache(cache_path):
-    with open(cache_path, 'rb') as f:
-        return pickle.load(f)
-
 def parse_local_log_file(local_path):
     logs = []
-    with open(local_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            try:
-                log_entry = json.loads(line)
-                if all(k in log_entry for k in ['T', 'IP', 'QH', 'Elapsed']):
-                    logs.append(log_entry)
-            except json.JSONDecodeError:
-                continue
-    return logs
+    malformed_lines = 0
+    try:
+        with open(local_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    log_entry = json.loads(line)
+                    if all(k in log_entry for k in ['T', 'IP', 'QH', 'Elapsed']):
+                        logs.append(log_entry)
+                    else:
+                        malformed_lines += 1
+                except json.JSONDecodeError:
+                    malformed_lines += 1
+                    continue
+        
+        print(f"Found {len(logs)} valid log entries.")
+        if malformed_lines > 0:
+            print(f"⚠️ Skipped {malformed_lines} malformed or non-query lines.")
+        return logs
+    except FileNotFoundError:
+        print(f"❌ Log file '{local_path}' not found.")
+        return None
 
 def analyze_and_export(logs):
     if not logs:
-        print("No logs to analyze.")
-        return
+        print("No log data to analyze.")
+        return None
 
-    most_recent_date = max(datetime.fromisoformat(log['T']).date() for log in logs)
-    filtered_logs = []
+    # Hardcoded time range (8am-2pm)
+    start_hour, end_hour = 8, 14
+    time_start = time(start_hour, 0)
+    time_end = time(end_hour, 0)
+    time_range_text = f"Peak Hours (8am-2pm)"
+
+    # Get target IP from environment (if specified)
+    target_ip = os.environ.get('TARGET_IP', None)
+    ip_choice = '1' if target_ip else '2'
+
+    # Convert and filter logs
+    processed_logs = []
     for log in logs:
-        ts = datetime.fromisoformat(log['T'])
-        if ts.date() == most_recent_date:
-            log['timestamp_obj'] = ts
-            log['hour'] = ts.hour
-            filtered_logs.append({
-                'timestamp_obj': ts,
+        timestamp = datetime.fromisoformat(log['T'])
+        if time_start <= timestamp.time() <= time_end:
+            processed_logs.append({
+                'timestamp_obj': timestamp,
                 'client_ip': log['IP'],
                 'domain': log['QH'],
                 'response_ms': log['Elapsed'] / 1_000_000.0,
-                'hour': ts.hour
+                'hour': timestamp.hour
             })
 
-    df = pd.DataFrame(filtered_logs)
-    df['time_block'] = df['hour'] // 3
-    interval_summary = df.groupby('time_block').agg(
-        Query_Count=('domain', 'count'),
-        Avg_Response_ms=('response_ms', 'mean'),
-        Most_Accessed_Domain=('domain', lambda x: x.mode()[0] if not x.mode().empty else "N/A")
-    ).reset_index()
-    interval_summary['Time_Block'] = interval_summary['time_block'].apply(lambda b: f"{b*3:02}:00 - {b*3+2:02}:59")
-    df_time_blocks = interval_summary[['Time_Block', 'Query_Count', 'Avg_Response_ms', 'Most_Accessed_Domain']]
-    df_time_blocks.loc[:, 'Avg_Response_ms'] = df_time_blocks['Avg_Response_ms'].round(2)
+    if not processed_logs:
+        print(f"🚫 No activity found in the selected time range (8am-2pm).")
+        return None
 
-    domain_counter = Counter(df['domain'])
-    df_top_domains = pd.DataFrame(domain_counter.most_common(10), columns=['Domain', 'Access_Count'])
+    if ip_choice == '1':
+        print(f"\n🔬 Analyzing logs for specific IP: {target_ip}...")
+        client_logs = [log for log in processed_logs if log['client_ip'] == target_ip]
+        if not client_logs:
+            print(f"🚫 No activity found for IP {target_ip} in the selected time range.")
+            return None
+        
+        # Time block analysis
+        df_intervals = pd.DataFrame(client_logs)
+        df_intervals['time_block'] = df_intervals['hour'] // 3
+        interval_summary = df_intervals.groupby('time_block').agg(
+            Query_Count=('domain', 'count'),
+            Avg_Response_ms=('response_ms', 'mean'),
+            Most_Accessed_Domain=('domain', lambda x: x.mode()[0] if not x.mode().empty else "N/A")
+        ).reset_index()
+        interval_summary['Time_Block'] = interval_summary['time_block'].apply(lambda b: f"{b*3:02}:00 - {b*3+2:02}:59")
+        df_time_blocks = interval_summary[['Time_Block', 'Query_Count', 'Avg_Response_ms', 'Most_Accessed_Domain']]
+        df_time_blocks['Avg_Response_ms'] = df_time_blocks['Avg_Response_ms'].round(2)
 
-    df_raw_data = df.copy()
-    df_raw_data['timestamp'] = df_raw_data['timestamp_obj'].dt.strftime('%Y-%m-%d %H:%M:%S')
-    df_raw_data.drop(columns=['timestamp_obj', 'hour', 'time_block'], inplace=True)
+        # Other metrics
+        domain_counter = Counter(log['domain'] for log in client_logs)
+        avg_response_time = mean(log['response_ms'] for log in client_logs)
+        most_common_domain = domain_counter.most_common(1)[0]
+        hour_counter = Counter(log['hour'] for log in client_logs)
+        busiest_hour, _ = hour_counter.most_common(1)[0]
 
-    output_filename = "adguard_analysis_all_clients.xlsx"
+        # Create DataFrames
+        df_summary = pd.DataFrame({
+            "Metric": ["Target IP", "Time Range", "Total Queries", "Avg Response (ms)", "Most Accessed Domain", "Busiest Hour"],
+            "Value": [target_ip, time_range_text, len(client_logs), f"{avg_response_time:.2f}", most_common_domain[0], f"{busiest_hour:02}:00"]
+        })
+        df_top_domains = pd.DataFrame(domain_counter.most_common(10), columns=['Domain', 'Access_Count'])
+        df_raw_data = pd.DataFrame(client_logs)
+        df_raw_data['timestamp'] = df_raw_data['timestamp_obj'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        df_raw_data = df_raw_data.drop(columns=['timestamp_obj', 'hour'])
+
+        output_filename = f"adguard_analysis_{target_ip.replace('.', '_')}.xlsx"
+    else:
+        print("\n🔬 Analyzing logs for all clients...")
+        df_intervals = pd.DataFrame(processed_logs)
+        df_intervals['time_block'] = df_intervals['hour'] // 3
+        interval_summary = df_intervals.groupby('time_block').agg(
+            Query_Count=('domain', 'count'),
+            Avg_Response_ms=('response_ms', 'mean'),
+            Most_Accessed_Domain=('domain', lambda x: x.mode()[0] if not x.mode().empty else "N/A")
+        ).reset_index()
+        interval_summary['Time_Block'] = interval_summary['time_block'].apply(lambda b: f"{b*3:02}:00 - {b*3+2:02}:59")
+        df_time_blocks = interval_summary[['Time_Block', 'Query_Count', 'Avg_Response_ms', 'Most_Accessed_Domain']]
+        df_time_blocks['Avg_Response_ms'] = df_time_blocks['Avg_Response_ms'].round(2)
+
+        # All IPs analysis
+        client_ips = sorted(list(set(log['client_ip'] for log in processed_logs)))
+        print(f"Found {len(client_ips)} unique client IPs.")
+        
+        clients_summary_data = []
+        for ip in client_ips:
+            client_logs = [log for log in processed_logs if log['client_ip'] == ip]
+            if not client_logs: continue
+            domain_counter = Counter(log['domain'] for log in client_logs)
+            hour_counter = Counter(log['hour'] for log in client_logs)
+            clients_summary_data.append({
+                "Client_IP": ip, 
+                "Total_Queries": len(client_logs),
+                "Avg_Response_ms": f"{mean(log['response_ms'] for log in client_logs):.2f}",
+                "Most_Accessed_Domain": domain_counter.most_common(1)[0][0],
+                "Busiest_Hour": f"{hour_counter.most_common(1)[0][0]:02}:00"
+            })
+        
+        df_clients_summary = pd.DataFrame(clients_summary_data)
+        df_raw_data = pd.DataFrame(processed_logs)
+        df_raw_data['timestamp'] = df_raw_data['timestamp_obj'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        df_raw_data = df_raw_data.drop(columns=['timestamp_obj', 'hour'])
+        
+        output_filename = "adguard_analysis_all_clients.xlsx"
+
+    # Write to Excel
     with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
-        df_top_domains.to_excel(writer, sheet_name='Top_Domains', index=False)
+        if ip_choice == '1':
+            df_summary.to_excel(writer, sheet_name='Summary', index=False)
+            df_top_domains.to_excel(writer, sheet_name='Top_Domains', index=False)
+        else:
+            df_clients_summary.to_excel(writer, sheet_name='All_Clients_Summary', index=False)
         df_time_blocks.to_excel(writer, sheet_name='Activity_by_Time_Block', index=False)
-        df_raw_data.to_excel(writer, sheet_name='All_Clients_Raw_Data', index=False)
+        df_raw_data.to_excel(writer, sheet_name='Raw_Data', index=False)
 
-    print(f"✅ Saved analysis to {output_filename}")
+    print(f"\n✅ Analysis complete! Data saved to '{output_filename}'")
     return output_filename
 
 def upload_to_gdrive(filepath):
-    print(f"🚀 Uploading {filepath} to Google Drive using service account...")
+    print(f"🚀 Uploading {filepath} to Google Drive...")
     creds_json = os.environ['GDRIVE_CREDENTIALS_JSON']
     folder_id = os.environ['GDRIVE_FOLDER_ID']
 
     with open("sa_creds.json", "w") as f:
         f.write(creds_json)
 
-    creds = service_account.Credentials.from_service_account_file("sa_creds.json", scopes=["https://www.googleapis.com/auth/drive"])
+    creds = service_account.Credentials.from_service_account_file(
+        "sa_creds.json", 
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
     service = build('drive', 'v3', credentials=creds)
 
     file_metadata = {
@@ -136,17 +214,9 @@ def main():
     if downloaded_path:
         raw_logs = parse_local_log_file(downloaded_path)
         if raw_logs:
-            logs = [
-                {
-                    'T': log['T'],
-                    'IP': log['IP'],
-                    'QH': log['QH'],
-                    'Elapsed': log['Elapsed']
-                }
-                for log in raw_logs
-            ]
-            output_file = analyze_and_export(logs)
-            upload_to_gdrive(output_file)
+            output_file = analyze_and_export(raw_logs)
+            if output_file:
+                upload_to_gdrive(output_file)
 
 if __name__ == "__main__":
     main()
