@@ -42,4 +42,4 @@ jobs:
         ANALYSIS_IP_CHOICE: '2' # 1 for specific, 2 for all
         ANALYSIS_TIME_CHOICE: '2' # 1 for peak, 2 for 24h
         # ANALYSIS_TARGET_IP: '192.168.1.100' # Only needed if IP_CHOICE is '1'
-      run: python your_script_name.py # Make sure to use the correct filename
+      run: python main3.py # Make sure to use the correct filename
