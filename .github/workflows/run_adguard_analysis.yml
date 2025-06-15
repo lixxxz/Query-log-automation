@@ -1,44 +1,36 @@
-name: AdGuard Daily Report
+name: AdGuard Log Processor
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-  # Runs the workflow automatically every day at 08:00 UTC (13:00 WITA)
-  schedule:
-    - cron: '0 8 * * *'
-
 jobs:
-  build-and-upload-report:
+  process-logs:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11' # Or your preferred python version
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install pandas paramiko pydrive2 openpyxl
 
-    - name: Run Analysis Script
-      env:
-        # Pass GitHub Secrets to the Python script as environment variables
-        CI: true # Lets the script know it's in an automated environment
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_PORT: ${{ secrets.SSH_PORT }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-        SSH_KEY: ${{ secrets.SSH_KEY }}
-        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-        REMOTE_LOG_PATH: ${{ secrets.REMOTE_LOG_PATH }}
-        GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-        GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
-        ANALYSIS_IP_CHOICE: '1' # 1 for specific, 2 for all
-        ANALYSIS_TARGET_IP: ${{ secrets.ANALYSIS_TARGET_IP }}
-        ANALYSIS_TIME_CHOICE: '1' # 1 for peak, 2 for 24h
-      run: python main.py # Make sure to use the correct filename
+      - name: Set up SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" | base64 -d > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Run Log Processor
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY_PATH: ~/.ssh/id_rsa
+          SSH_REMOTE_LOG: ${{ secrets.SSH_REMOTE_LOG }}
+        run: |
+          python main.py
