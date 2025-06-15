@@ -41,6 +41,4 @@ jobs:
         ANALYSIS_IP_CHOICE: '1' # 1 for specific, 2 for all
         ANALYSIS_TARGET_IP: ${{ secrets.ANALYSIS_TARGET_IP }}
         ANALYSIS_TIME_CHOICE: '1' # 1 for peak, 2 for 24h
-        
-    -  name: Run Python script
-    run: python main.py # Make sure to use the correct filename
+      run: python main.py # Make sure to use the correct filename
