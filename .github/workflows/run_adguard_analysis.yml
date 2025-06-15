@@ -39,5 +39,5 @@ jobs:
           REMOTE_LOG_PATH: ${{ secrets.REMOTE_LOG_PATH }}
           GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
-          TARGET_IP: ${{ secrets.TARGET.IP }}
+          TARGET_IP: ${{ github.event.inputs.target_ip }}
         run: python main.py
