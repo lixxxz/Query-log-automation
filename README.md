@@ -14,7 +14,7 @@ This project provides a set of scripts to automatically:
 * Fetch query logs from a specified source.
 * Process and clean the log data.
 * Extract meaningful insights or statistics.
-* (Maybe) Save the results into a database or a file like `.csv` or `.json`.
+* Save the results into a `xlsx`.
 
 ## ✨ Features
 
