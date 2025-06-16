@@ -117,24 +117,61 @@ def analyze_and_export(logs):
         df_time_blocks = interval_summary[['Time_Block', 'Query_Count', 'Avg_Response_ms', 'Most_Accessed_Domain']]
         df_time_blocks['Avg_Response_ms'] = df_time_blocks['Avg_Response_ms'].round(2)
 
-        # Other metrics
+        # Domain statistics
         domain_counter = Counter(log['domain'] for log in client_logs)
         avg_response_time = mean(log['response_ms'] for log in client_logs)
         most_common_domain = domain_counter.most_common(1)[0]
         hour_counter = Counter(log['hour'] for log in client_logs)
         busiest_hour, _ = hour_counter.most_common(1)[0]
 
-        # Create DataFrames
+        # Enhanced domain analysis with response times
+        domain_stats = {}
+        for log in client_logs:
+            domain = log['domain']
+            if domain not in domain_stats:
+                domain_stats[domain] = {
+                    'max_response': log['response_ms'],
+                    'min_response': log['response_ms'],
+                    'max_time': log['timestamp_obj'],
+                    'min_time': log['timestamp_obj']
+                }
+            else:
+                if log['response_ms'] > domain_stats[domain]['max_response']:
+                    domain_stats[domain]['max_response'] = log['response_ms']
+                    domain_stats[domain]['max_time'] = log['timestamp_obj']
+                if log['response_ms'] < domain_stats[domain]['min_response']:
+                    domain_stats[domain]['min_response'] = log['response_ms']
+                    domain_stats[domain]['min_time'] = log['timestamp_obj']
+
+        # Create enhanced top domains DataFrame
+        top_domains_data = []
+        for domain, count in domain_counter.most_common(10):
+            stats = domain_stats.get(domain, {})
+            top_domains_data.append({
+                'Domain': domain,
+                'Access_Count': count,
+                'Highest_Response_ms': round(stats.get('max_response', 0), 2),
+                'Time_of_Highest': stats.get('max_time', datetime.min).strftime('%Y-%m-%d %H:%M:%S'),
+                'Lowest_Response_ms': round(stats.get('min_response', 0), 2),
+                'Time_of_Lowest': stats.get('min_time', datetime.min).strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        df_top_domains = pd.DataFrame(top_domains_data)
+
+        # Create summary DataFrame
         df_summary = pd.DataFrame({
             "Metric": ["Target IP", "Time Range", "Total Queries", "Avg Response (ms)", "Most Accessed Domain", "Busiest Hour"],
             "Value": [target_ip, time_range_text, len(client_logs), f"{avg_response_time:.2f}", most_common_domain[0], f"{busiest_hour:02}:00"]
         })
-        df_top_domains = pd.DataFrame(domain_counter.most_common(10), columns=['Domain', 'Access_Count'])
+
+        # Prepare raw data
         df_raw_data = pd.DataFrame(client_logs)
         df_raw_data['timestamp'] = df_raw_data['timestamp_obj'].dt.strftime('%Y-%m-%d %H:%M:%S')
         df_raw_data = df_raw_data.drop(columns=['timestamp_obj', 'hour'])
 
-        output_filename = f"adguard_analysis_{target_ip.replace('.', '_')}.xlsx"
+        # Generate filename with timestamp
+        current_time = datetime.now().strftime('%d%b%Y_%H%M')
+        output_filename = f"adguard_analysis_{target_ip.replace('.', '_')}_{current_time}.xlsx"
     else:
         print("\n🔬 Analyzing logs for all clients...")
         df_intervals = pd.DataFrame(processed_logs)
@@ -156,13 +193,35 @@ def analyze_and_export(logs):
         for ip in client_ips:
             client_logs = [log for log in processed_logs if log['client_ip'] == ip]
             if not client_logs: continue
+            
+            # Domain statistics for each client
             domain_counter = Counter(log['domain'] for log in client_logs)
+            domain_stats = {}
+            for log in client_logs:
+                domain = log['domain']
+                if domain not in domain_stats:
+                    domain_stats[domain] = {
+                        'max_response': log['response_ms'],
+                        'min_response': log['response_ms'],
+                        'max_time': log['timestamp_obj'],
+                        'min_time': log['timestamp_obj']
+                    }
+                else:
+                    if log['response_ms'] > domain_stats[domain]['max_response']:
+                        domain_stats[domain]['max_response'] = log['response_ms']
+                        domain_stats[domain]['max_time'] = log['timestamp_obj']
+                    if log['response_ms'] < domain_stats[domain]['min_response']:
+                        domain_stats[domain]['min_response'] = log['response_ms']
+                        domain_stats[domain]['min_time'] = log['timestamp_obj']
+            
             hour_counter = Counter(log['hour'] for log in client_logs)
             clients_summary_data.append({
                 "Client_IP": ip, 
                 "Total_Queries": len(client_logs),
                 "Avg_Response_ms": f"{mean(log['response_ms'] for log in client_logs):.2f}",
                 "Most_Accessed_Domain": domain_counter.most_common(1)[0][0],
+                "Highest_Response_ms": round(max(log['response_ms'] for log in client_logs), 2),
+                "Lowest_Response_ms": round(min(log['response_ms'] for log in client_logs), 2),
                 "Busiest_Hour": f"{hour_counter.most_common(1)[0][0]:02}:00"
             })
         
@@ -171,7 +230,9 @@ def analyze_and_export(logs):
         df_raw_data['timestamp'] = df_raw_data['timestamp_obj'].dt.strftime('%Y-%m-%d %H:%M:%S')
         df_raw_data = df_raw_data.drop(columns=['timestamp_obj', 'hour'])
         
-        output_filename = "adguard_analysis_all_clients.xlsx"
+        # Generate filename with timestamp for all IPs
+        current_time = datetime.now().strftime('%d%b%Y_%H%M')
+        output_filename = f"adguard_analysis_all_clients_{current_time}.xlsx"
 
     # Write to Excel
     with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
